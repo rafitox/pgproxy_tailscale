@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: cgr.dev/chainguard/postgres:latest
+    container_name: postgres
+    user: "70:70"
+    runtime: "runsc"
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: {POSTGRES_USER}
+      POSTGRES_PASSWORD: {POSTGRES_PASSWORD}
+      POSTGRES_DB: test_db
+    networks: 
+      - pgnet
+    dns:
+      - 9.9.9.9
+    #ports:
+    #  - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./certificates/server.crt:/var/lib/postgresql/server.crt:ro
+      - ./certificates/server.key:/var/lib/postgresql/server.key:ro
+    command:
+      [
+        "-c", "ssl=on",
+        "-c", "ssl_cert_file=/var/lib/postgresql/server.crt",
+        "-c", "ssl_key_file=/var/lib/postgresql/server.key"
+      ]
+  pgproxy:
+    image: rafaelribeiro96/pgproxy:1.82.5
+    command:
+      [
+        "--hostname", "pgproxy-node",
+        "--upstream-addr", "postgres:5432",
+        "--port", "5432",
+        "--upstream-ca-file", "/certificates/ca.pem",
+        "--state-dir", "/var/lib/pgproxy",
+      ]
+    container_name: pgproxy
+    runtime: "runsc"
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: {POSTGRES_USER}
+      PGPASSWORD: {POSTGRES_PASSWORD}
+      TSKEY: {TSKEY_API}
+    ports:
+      - "5432:5432"
+    networks:
+      - pgnet
+    dns:
+      - 9.9.9.9
+    links:
+      - postgres
+    volumes:
+      - ./certificates/ca.pem:/certificates/ca.pem:ro
+      - ./pgproxy-state:/var/lib/pgproxy
+networks:
+  pgnet:
+    driver: bridge
+volumes:
+  pgdata: {}
